@@ -1,0 +1,19 @@
+<!doctype html>
+<head>
+  <meta name="author" content="puravidaapps.com">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page</title>
+</head>
+
+<body>
+  <div id="myDiv">
+    <p><img id = "myImage" src="" alt="" title=""></p>
+  </div>
+  <script>
+    // get the iamge file name from the window.AppInventor object and display it
+    var image = window.AppInventor.getWebViewString();
+    document.getElementById("myImage").src = image;
+  </script>
+</body>
+</html>
