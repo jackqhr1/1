@@ -1,0 +1,353 @@
+#include<windows.h>
+#include"resource.h"
+#include<stdlib.h>
+#include<time.h>
+#include<stdio.h>
+  
+#define TIMER_DIREN 101      //定义定时器
+#define TIMER_DIRENMOVE 102
+#define TIMER_ZIDAN 103
+#define TIMER_DIRENRELEASE 104
+  
+typedef struct Node    //敌人，自己，子弹结构体
+{
+  int x;
+  int y;
+  struct Node *pnext;
+}DiRen,FeiJi,ZiDan;
+void ZaoDiRen();                //造敌人
+void ShowDiRen(DiRen *pHead,HWND hWnd);     //显示敌人
+void ZaoZiDan();                //造子弹
+void ShowZiDan(ZiDan *pHead,HWND hWnd);     //显示子弹
+void DiRenMove(DiRen *pHead);          //敌人移动
+void ZiDanMove(DiRen *pHead);          //子弹移动
+void shoot(HWND hWnd,FeiJi *ziji,DiRen **diren,ZiDan **zidan);//判断是否射中   
+void ReleaseDiren(DiRen **pHead);        //释放出去的敌人
+void ReleaseZidan(ZiDan **pHead);        //释放出去的子弹
+void ZaoZiJi(HWND hWnd);            //造自己
+LRESULT CALLBACK pp(HWND hWnd,UINT msg,WPARAM wParam,LPARAM lParam);//回调函数
+int __stdcall WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nCmdShow)
+{
+  WNDCLASSEX wc;
+  HWND hWnd;
+  MSG msg;
+  wc.hInstance=hInstance;
+  wc.cbClsExtra=0;
+  wc.cbSize=sizeof(WNDCLASSEX);
+  wc.cbWndExtra=0;
+  wc.hIcon=NULL ;
+  wc.hCursor=NULL ;
+  wc.hIconSm=NULL;
+  wc.lpfnWndProc=pp;
+  wc.lpszClassName="hello";
+  wc.lpszMenuName=NULL;
+  wc.style=CS_HREDRAW|CS_VREDRAW | CS_OWNDC ;
+  wc.hbrBackground=(HBRUSH)5;
+  RegisterClassEx(&wc);
+  hWnd=CreateWindow("hello","world", WS_OVERLAPPEDWINDOW,100,100,600,600,NULL,NULL,hInstance,NULL);
+  ShowWindow(hWnd,nCmdShow);
+  while(GetMessage(&msg,NULL,0,0))
+  {
+    TranslateMessage(&msg);
+    DispatchMessage(&msg);
+  }
+  return 0;
+}
+DiRen *pDiRen=NULL;  //敌人
+ZiDan *pZiDan=NULL;  //子弹
+FeiJi *pZiJi=NULL;   //自己
+static int score=0;   //分数
+static char sco[20];  //装分数的字符窜
+LRESULT CALLBACK pp(HWND hWnd,UINT msg,WPARAM wParam,LPARAM lParam)
+{
+  int i=1,  //位
+    jscore;
+  HDC hdc;
+  HDC memdc;
+  HBITMAP hbm;
+  BITMAP bminfo;
+  switch(msg)
+  {
+  case WM_TIMER:   //定时器
+    hdc=GetDC(hWnd); //得到设备句柄
+    hbm=LoadBitmap(GetModuleHandle(NULL),MAKEINTRESOURCE(IDB_BITMAP4));//载入背景位图
+    GetObject(hbm, sizeof(bminfo), &bminfo); 
+    memdc=CreateCompatibleDC(hdc);
+    SelectObject(memdc,hbm);
+    BitBlt(hdc,0,0,600,600,memdc,0,0,SRCCOPY);
+    /*itoa(score,sco,10);*/
+    sprintf(sco,"%d",score);  //将分数装入字符窜
+    jscore=score;
+    while((jscore=jscore/10)>0) //判断分数有几位
+      i++;
+    TextOut(hdc,0,0,"分数",4);
+    TextOut(hdc,30,0,sco,i); //显示分数
+    DeleteDC(memdc);
+    ReleaseDC(hWnd,hdc);  //释放句柄
+    DeleteObject(hbm);
+    ZaoZiJi(hWnd);     //造自己
+    if(TIMER_ZIDAN==wParam)  //定时器101
+    {
+      ZiDanMove(pZiDan);   //子弹移动
+      ReleaseZidan(&pZiDan); //释放出屏幕的子弹
+    }
+    else if( TIMER_DIREN==wParam) //定时器102
+    { 
+      ZaoDiRen();       //造敌人    
+    }
+    else if(TIMER_DIRENRELEASE==wParam)  //定时器103
+    {
+      ReleaseDiren(&pDiRen);  //释放出屏幕的敌人
+    }
+    ShowDiRen(pDiRen,hWnd);       //显示敌人
+    DiRenMove(pDiRen);       //敌人移动
+    ShowZiDan(pZiDan,hWnd);     //显示子弹
+    shoot(hWnd,pZiJi,&pDiRen,&pZiDan);   //是否射中
+    break;
+  case WM_CLOSE:    //关闭
+    PostQuitMessage(0);
+    break;
+  case WM_KEYDOWN:    //判断按键
+    switch(wParam)   
+    {
+    case VK_LEFT:   //左移
+      if(pZiJi->x>0)
+        pZiJi->x-=20;
+      break;
+    case VK_RIGHT:  //右移
+      if(pZiJi->x<530)
+      pZiJi->x+=20;
+      break;
+    case VK_UP:   //上移
+      if(pZiJi->y>0)
+      pZiJi->y-=20;
+      break;
+    case VK_DOWN:  //下移
+      if(pZiJi->y<520)
+      pZiJi->y+=20;
+      break;
+    case VK_SPACE:  //空格发射子弹
+      ZaoZiDan();
+      break;
+    }
+    break;
+  case WM_CREATE:   //创建
+    srand(time(NULL));  
+    pZiJi=(struct Node*)malloc(sizeof(struct Node));
+    pZiJi->x=200;     //自己的x
+    pZiJi->y=500;     //自己的y
+    SetTimer(hWnd,TIMER_DIREN,1000,NULL);  //设置定时器
+    SetTimer(hWnd,TIMER_DIRENMOVE,200,NULL);
+    SetTimer(hWnd,TIMER_ZIDAN,100,NULL);
+    SetTimer(hWnd,TIMER_DIRENRELEASE,300,NULL);
+    break;
+  }
+  return DefWindowProc(hWnd,msg,wParam,lParam);
+}
+  
+  
+void ZaoDiRen()  //造子弹
+{
+  DiRen *u;
+  u=(struct Node*)malloc(sizeof(struct Node)); 
+  u->x=rand()%550;   //子弹的x随机出现
+  u->y=-10;      //出现的纵坐标固定
+  u->pnext=NULL;
+  if(NULL==pDiRen)  
+  {
+    pDiRen=u;
+  }
+  else
+  {
+    u->pnext=pDiRen;   //将新产生的链表放在头
+    pDiRen=u;
+  
+  }
+}
+void ShowDiRen(struct Node *pHead,HWND hWnd)  //显示敌人
+{
+  HDC hdc;
+  HDC memdc;
+  HBITMAP hbm;
+  BITMAP bminfo;
+  hdc=GetDC(hWnd);
+  hbm=LoadBitmap(GetModuleHandle(NULL),MAKEINTRESOURCE(IDB_BITMAP1));//载入敌人位图
+  GetObject(hbm, sizeof(bminfo), &bminfo); 
+  memdc=CreateCompatibleDC(hdc);
+  SelectObject(memdc,hbm);
+while(pHead!=NULL) //敌人链表不为空，显示敌机
+  { 
+    BitBlt(hdc,pHead->x,pHead->y,40,40,memdc,0,0,SRCCOPY);
+    pHead=pHead->pnext; 
+  }
+  DeleteDC(memdc);
+  ReleaseDC(hWnd,hdc);
+  DeleteObject(hbm);
+}
+void ZaoZiJi(HWND hWnd)
+{
+  HDC hdc;
+  HDC memdc;
+  HBITMAP hbm;
+  BITMAP bminfo;
+  hdc=GetDC(hWnd);
+  hbm=LoadBitmap(GetModuleHandle(NULL),MAKEINTRESOURCE(IDB_BITMAP3));//载入自己的位图
+  GetObject(hbm, sizeof(bminfo), &bminfo); 
+  memdc=CreateCompatibleDC(hdc);
+  SelectObject(memdc,hbm);
+  BitBlt(hdc,pZiJi->x,pZiJi->y,40,40,memdc,0,0,SRCCOPY); //显示自己
+  DeleteDC(memdc);
+  ReleaseDC(hWnd,hdc);
+  DeleteObject(hbm);
+}
+void ZaoZiDan()   //造子弹
+{
+  ZiDan *u;
+  u=(ZiDan*)malloc(sizeof(ZiDan));
+  u->x=pZiJi->x+15;
+  u->y=pZiJi->y+10;
+  u->pnext=NULL;
+  if(pZiDan==NULL)
+  {
+    pZiDan=u;
+  }  
+  else
+  {
+    u->pnext=pZiDan;  //将子弹放在链表头
+    pZiDan=u;
+  }
+}
+void ShowZiDan(ZiDan *pHead,HWND hWnd) //显示子弹
+{
+  HDC hdc;
+  HDC memdc;
+  HBITMAP hbm;
+  BITMAP bminfo;
+  hdc=GetDC(hWnd);
+  hbm=LoadBitmap(GetModuleHandle(NULL),MAKEINTRESOURCE(IDB_BITMAP2)); //插入子弹位图
+  GetObject(hbm, sizeof(bminfo), &bminfo); 
+  memdc=CreateCompatibleDC(hdc);
+  SelectObject(memdc,hbm);
+  while(pHead!=NULL)  //子弹链表不为空，显示子弹
+  {
+    /*Ellipse(hdc,pHead->x,pHead->y,pHead->x+5,pHead->y+5);*/
+    BitBlt(hdc,pHead->x,pHead->y,10,10,memdc,0,0,SRCCOPY);
+    pHead=pHead->pnext;
+  }  
+  DeleteDC(memdc);
+  ReleaseDC(hWnd,hdc);
+  DeleteObject(hbm);
+}
+  
+void DiRenMove(DiRen *pHead)  //敌人移动
+{
+  while(pHead!=NULL)  //链表不为空，敌人移动
+  {  
+    if(score<500)
+    {
+      pHead->y+=10;
+      pHead=pHead->pnext; 
+    }
+    else
+    {
+      pHead->y+=20;
+      pHead=pHead->pnext;
+    }
+  }
+}
+void ZiDanMove(DiRen *pHead)  //子弹移动
+{
+  while(pHead!=NULL)  //链表不为空子弹移动
+  {
+    pHead->y-=20;
+    pHead=pHead->pnext; 
+  }
+}
+  
+void shoot(HWND hWnd,FeiJi *ziji,DiRen **diren,ZiDan **zidan) //判断是否中
+{
+  DiRen *js1=*diren;
+  ZiDan *js2=*zidan;
+  int n = 1;
+  while(js1!=NULL) //判断自己是否撞机
+  {
+    //撞击释放定时器游戏结束
+    if((ziji->x-js1->x<30&&ziji->x-js1->x>-38)&&(ziji->y-js1->y<25&&ziji->y-js1->y>-38))
+    {
+      KillTimer(hWnd,TIMER_DIREN);
+      KillTimer(hWnd,TIMER_ZIDAN);
+      KillTimer(hWnd,TIMER_DIRENMOVE);
+      KillTimer(hWnd,TIMER_DIRENRELEASE);
+      MessageBox(hWnd,"You Lose","窗口",MB_OK);
+      PostQuitMessage(0);
+      break;
+    }
+    else
+      js1=js1->pnext;  //没有判断下一个敌机
+  } 
+  js1=*diren;  //敌机回到头
+  while((js1=*diren)!=NULL)  //判断敌人是否为空
+  {
+    zidan = &pZiDan;  
+    n = 0;
+    while((js2=*zidan)!=NULL) //判断子弹是否为空
+    {    
+      //敌机中弹
+      if((js2->x - js1->x <= 40&&js2->x - js1->x>=-5)&&(js2->y - js1->y <= 40&&js2->y - js1->y>=-8))
+      {
+        score+=100;
+        n = 1;
+        *zidan = js2->pnext;
+        if(js1->pnext!=NULL) //链表下节不为空，指向下一个释放中弹的飞机子弹
+        {
+          *diren = js1->pnext;
+          diren = &pDiRen;
+          free(js1);
+          free(js2);
+        }
+        else
+          *diren = NULL;  
+        break;
+      }
+      else
+      {
+        zidan = &js2->pnext;  //没中看下一个
+      }
+    }
+    if(n != 1)  //判断是否是中弹出来的
+    {
+      diren = &js1->pnext; 
+    }
+  }
+}
+void ReleaseDiren(DiRen **pHead) //释放飞出屏幕的敌人
+{
+  DiRen *js=*pHead;
+  while((js=*pHead)!=NULL)
+  {
+    if(js->y>600)    //飞出屏幕释放
+    {
+      *pHead=js->pnext;
+      free(js);
+    }
+    else
+    {
+      pHead = &js->pnext;  //看下一个
+    }
+  }
+}
+void ReleaseZidan(ZiDan **pHead)  //释放子弹
+{
+  ZiDan *js=*pHead;
+  while((js=*pHead)!=NULL)
+  {
+    if(js->y<0)    //飞出的子弹释放
+    {
+      *pHead=js->pnext;  
+      free(js);
+    }
+    else
+      pHead=&js->pnext;  //没飞出看下一个
+  }
+  return 0;
+}
